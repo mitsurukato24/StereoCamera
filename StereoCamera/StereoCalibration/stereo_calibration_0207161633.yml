@@ -1,0 +1,36 @@
+%YAML:1.0
+---
+camera_type: D435
+calibration_time: "0207161633"
+image_width: 640
+image_height: 480
+board_width: 9
+board_height: 6
+cell_size: 22.
+left_camera_matrix: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ 3.8747436729319872e+02, 0., 3.2126742426772506e+02, 0.,
+       3.8834542273276071e+02, 2.3886069992525429e+02, 0., 0., 1. ]
+left_distortion_error: !!opencv-matrix
+   rows: 5
+   cols: 1
+   dt: d
+   data: [ -6.9591770154717961e-03, 3.3832400952046482e-02,
+       -3.6349850332880753e-04, 3.7945876048103708e-04,
+       -3.6405273647542445e-02 ]
+right_camera_matrix: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ 3.8747436729319872e+02, 0., 3.2126742426772506e+02, 0.,
+       3.8834542273276071e+02, 2.3886069992525429e+02, 0., 0., 1. ]
+right_distortion_error: !!opencv-matrix
+   rows: 5
+   cols: 1
+   dt: d
+   data: [ -6.9591770154717961e-03, 3.3832400952046482e-02,
+       -3.6349850332880753e-04, 3.7945876048103708e-04,
+       -3.6405273647542445e-02 ]
+rms: 2.1162001456242743e-01
