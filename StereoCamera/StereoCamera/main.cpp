@@ -67,11 +67,12 @@ int main() try
 	bm->setDisp12MaxDiff(Config::get<int>("bm_disp_12_max_diff"));
 
 	cv::Ptr<cv::StereoSGBM> sgbm = cv::StereoSGBM::create();
-	int sgbm_win_size = 9;
+	int sgbm_window_size = Config::get<int>("sgbm_window_size");
 	int cn = 1;
 	sgbm->setPreFilterCap(Config::get<int>("sgbm_pre_filter_cap"));
-	sgbm->setP1(8 * cn * sgbm_win_size * sgbm_win_size);
-	sgbm->setP2(32 * cn * sgbm_win_size * sgbm_win_size);
+	sgbm->setBlockSize(sgbm_window_size);
+	sgbm->setP1(8 * cn * sgbm_window_size * sgbm_window_size);
+	sgbm->setP2(32 * cn * sgbm_window_size * sgbm_window_size);
 	sgbm->setMinDisparity(Config::get<int>("sgbm_min_disparity"));
 	sgbm->setNumDisparities(num_disparities);
 	sgbm->setUniquenessRatio(Config::get<int>("sgbm_uniqueness_ratio"));
@@ -107,6 +108,8 @@ int main() try
 		cv::Mat show_bm_disp, show_sgbm_disp, show_disp;
 		bm_disp.convertTo(show_bm_disp, CV_8U, 255 / (num_disparities * 16.));
 		sgbm_disp.convertTo(show_sgbm_disp, CV_8U, 255 / (num_disparities * 16.));
+		cv::applyColorMap(show_bm_disp, show_bm_disp, cv::COLORMAP_JET);
+		cv::applyColorMap(show_sgbm_disp, show_sgbm_disp, cv::COLORMAP_JET);
 		cv::hconcat(show_bm_disp, show_sgbm_disp, show_disp);
 		cv::imshow("show disparity", show_disp);
 		cv::waitKey(1);
