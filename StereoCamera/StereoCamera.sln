@@ -7,6 +7,10 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "StereoCamera", "StereoCamer
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "StereoCalibration", "StereoCalibration\StereoCalibration.vcxproj", "{4CE398EB-62F2-4752-B79F-6920A9B6C43F}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TrinocularStereoCalibration", "TrinocularStereoCalibration\TrinocularStereoCalibration.vcxproj", "{5DFB0625-5B19-4929-837D-21E18D7EF819}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TrinocularStereoCamera", "TrinocularStereoCamera\TrinocularStereoCamera.vcxproj", "{2C61FBDD-A8CD-40A1-ACF9-3D5F4BDA667E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -31,6 +35,22 @@ Global
 		{4CE398EB-62F2-4752-B79F-6920A9B6C43F}.Release|x64.Build.0 = Release|x64
 		{4CE398EB-62F2-4752-B79F-6920A9B6C43F}.Release|x86.ActiveCfg = Release|Win32
 		{4CE398EB-62F2-4752-B79F-6920A9B6C43F}.Release|x86.Build.0 = Release|Win32
+		{5DFB0625-5B19-4929-837D-21E18D7EF819}.Debug|x64.ActiveCfg = Debug|x64
+		{5DFB0625-5B19-4929-837D-21E18D7EF819}.Debug|x64.Build.0 = Debug|x64
+		{5DFB0625-5B19-4929-837D-21E18D7EF819}.Debug|x86.ActiveCfg = Debug|Win32
+		{5DFB0625-5B19-4929-837D-21E18D7EF819}.Debug|x86.Build.0 = Debug|Win32
+		{5DFB0625-5B19-4929-837D-21E18D7EF819}.Release|x64.ActiveCfg = Release|x64
+		{5DFB0625-5B19-4929-837D-21E18D7EF819}.Release|x64.Build.0 = Release|x64
+		{5DFB0625-5B19-4929-837D-21E18D7EF819}.Release|x86.ActiveCfg = Release|Win32
+		{5DFB0625-5B19-4929-837D-21E18D7EF819}.Release|x86.Build.0 = Release|Win32
+		{2C61FBDD-A8CD-40A1-ACF9-3D5F4BDA667E}.Debug|x64.ActiveCfg = Debug|x64
+		{2C61FBDD-A8CD-40A1-ACF9-3D5F4BDA667E}.Debug|x64.Build.0 = Debug|x64
+		{2C61FBDD-A8CD-40A1-ACF9-3D5F4BDA667E}.Debug|x86.ActiveCfg = Debug|Win32
+		{2C61FBDD-A8CD-40A1-ACF9-3D5F4BDA667E}.Debug|x86.Build.0 = Debug|Win32
+		{2C61FBDD-A8CD-40A1-ACF9-3D5F4BDA667E}.Release|x64.ActiveCfg = Release|x64
+		{2C61FBDD-A8CD-40A1-ACF9-3D5F4BDA667E}.Release|x64.Build.0 = Release|x64
+		{2C61FBDD-A8CD-40A1-ACF9-3D5F4BDA667E}.Release|x86.ActiveCfg = Release|Win32
+		{2C61FBDD-A8CD-40A1-ACF9-3D5F4BDA667E}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

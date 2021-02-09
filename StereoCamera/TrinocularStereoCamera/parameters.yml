@@ -1,0 +1,24 @@
+%YAML:1.0
+
+# ---------------- RealSense ------------------------
+calibration_file: "C:/Users/mkkat/source/repos/StereoCamera/StereoCamera/TrinocularStereoCalibration/trinocular_stereo_calibration_0209033528.yml"
+rs2_emitter: 0
+
+# ----------------- Stereo BM -----------------------
+sad_window_size: 9
+bm_pre_filter_cap: 63
+bm_min_disparity: 0
+bm_texture_threshold: 10
+bm_uniqueness_ratio: 10
+bm_speckle_window_size: 100
+bm_speckle_range: 32
+bm_disp_12_max_diff: 1
+
+# ---------------- Stereo SGBM ----------------------
+sgbm_window_size: 9
+sgbm_pre_filter_cap: 63
+sgbm_min_disparity: 0
+sgbm_uniqueness_ratio: 10
+sgbm_speckle_window_size: 100
+sgbm_speckle_range: 32
+sgbm_disp_12_max_diff: 1

@@ -8,188 +8,30 @@
 
 enum Infrared { LEFT = 1, RIGHT = 2 };
 
-bool calibration(
-	rs2::pipeline &pipeline, const Infrared infrared, 
-	const cv::Size img_size, const cv::Size board_size, const float chess_size
+double calculate_average_reprojection_err(
+	std::vector<std::vector<cv::Point3f>> &obj_pts,
+	std::vector<std::vector<cv::Point2f>> &corner_pts,
+	std::vector<cv::Mat> &rvecs, std::vector<cv::Mat> &tvecs,
+	cv::Mat camera_mat, cv::Mat dist_coeff
 )
 {
-	std::chrono::system_clock::time_point start, end;
-	int min_num_frames = 10;
-	std::vector<std::vector<cv::Point2f>> corner_pts;  // corner points in image coordinates
-	while (true)
+	double total_err = 0, err;
+	int total_pts = 0;
+	std::vector<float> reproj_errs;
+	std::vector<cv::Point2f> tmp_img_pts;
+	reproj_errs.resize(obj_pts.size());
+	for (int i = 0; i < (int)obj_pts.size(); i++)
 	{
-		start = std::chrono::system_clock::now();
-
-		// ------------------------------------- Get Frame -----------------------------------------------
-		rs2::frameset frameset;
-		if (!pipeline.poll_for_frames(&frameset)) continue;
-
-		rs2::frame rs2_frame = frameset.get_infrared_frame(infrared);
-		cv::Mat frame(img_size, CV_8UC1, (void*)rs2_frame.get_data(), cv::Mat::AUTO_STEP);
-
-		std::vector<cv::Point2f> buf_corner_pts;
-		int chess_board_flags = cv::CALIB_CB_ADAPTIVE_THRESH | cv::CALIB_CB_NORMALIZE_IMAGE;
-		bool found = cv::findChessboardCorners(frame, board_size, buf_corner_pts, chess_board_flags);
-
-		if (found)
-		{
-			// Use CornerSubPix to improve accuracy
-			cv::Size win_size(11, 11);  // half of search window
-			cv::TermCriteria termCriteia(cv::TermCriteria::EPS + cv::TermCriteria::COUNT, 50, 0.0001);
-			cv::cornerSubPix(frame, buf_corner_pts, win_size, cv::Size(-1, -1), termCriteia);
-
-			cv::Mat show_calib;
-			cv::cvtColor(frame, show_calib, cv::COLOR_GRAY2BGR);
-			cv::drawChessboardCorners(show_calib, board_size, cv::Mat(buf_corner_pts), found);
-			cv::imshow("calibration", frame);
-
-			end = std::chrono::system_clock::now();
-			double fps = 1000000.0 / (static_cast<double> (std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()));
-			// printf("%lf fps\n", fps);
-
-			int key = cv::waitKey(1);
-			if (key == ESC_KEY) break;
-			else if (key == SPACE_KEY)
-			{
-				cv::imshow("show picked image", frame);
-				int k = cv::waitKey(0);
-				if (k == SPACE_KEY) corner_pts.push_back(buf_corner_pts);
-			}
-		}
-		else
-		{
-			end = std::chrono::system_clock::now();
-			double fps = 1000000.0 / (static_cast<double> (std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()));
-			// printf("%lf fps\n", fps);
-
-			cv::imshow("calibration", frame);
-			int key = cv::waitKey(1);
-			if (key == ESC_KEY) break;
-		}
+		cv::projectPoints(cv::Mat(obj_pts[i]), rvecs[i], tvecs[i], camera_mat, dist_coeff, tmp_img_pts);
+		err = cv::norm(cv::Mat(corner_pts[i]), cv::Mat(tmp_img_pts), cv::NORM_L2);
+		int n = (int)obj_pts[i].size();
+		reproj_errs[i] = (float)std::sqrt(err*err / n);
+		total_err += err*err;
+		total_pts += n;
 	}
-
-	// --- calculate intrinsic and extrinsic parameters
-	if ((int)corner_pts.size() >= min_num_frames)
-	{
-		std::vector<cv::Point3f> new_obj_pts;
-		std::vector<std::vector<cv::Point3f>> obj_pts(1);  // true 3d coordinates of corners
-		for (int h = 0; h < board_size.height; h++)
-		{
-			for (int w = 0; w < board_size.width; w++)
-			{
-				obj_pts[0].push_back(cv::Point3f(chess_size*w, chess_size*h, 0));
-			}
-		}
-		new_obj_pts = obj_pts[0];
-		obj_pts.resize(corner_pts.size(), obj_pts[0]); // copy
-		std::vector<cv::Mat> rvecs, tvecs;
-		cv::Mat camera_mat = cv::Mat::eye(3, 3, CV_64F);
-		cv::Mat dist_coeff = cv::Mat::zeros(8, 1, CV_64F);
-		bool use_calibrateCameraRO = false;
-		double rms;
-		if (use_calibrateCameraRO)
-		{
-			// more accurate
-			int iFixedPt = board_size.width - 1;
-			rms = cv::calibrateCameraRO(
-				obj_pts, corner_pts, img_size, iFixedPt, camera_mat, dist_coeff,
-				rvecs, tvecs, new_obj_pts
-			);
-		}
-		else
-		{
-			rms = cv::calibrateCamera(
-				obj_pts, corner_pts, img_size, camera_mat, dist_coeff, rvecs, tvecs
-			);
-		}
-		std::cout << "RMS error reported by calibrateCamera: " << rms << std::endl;
-
-		if (!(cv::checkRange(camera_mat) && cv::checkRange(dist_coeff)))
-		{
-			std::cout << "Calibration failed" << std::endl;
-			return false;
-		}
-
-		// --- caliculate avg reprojection error
-		obj_pts.clear();
-		obj_pts.resize(corner_pts.size(), new_obj_pts);
-		double total_err = 0, err;
-		int total_pts = 0;
-		std::vector<float> reproj_errs;
-		std::vector<cv::Point2f> tmp_img_pts;
-		reproj_errs.resize(obj_pts.size());
-		for (int i = 0; i < (int)obj_pts.size(); i++)
-		{
-			cv::projectPoints(cv::Mat(obj_pts[i]), rvecs[i], tvecs[i], camera_mat, dist_coeff, tmp_img_pts);
-			err = cv::norm(cv::Mat(corner_pts[i]), cv::Mat(tmp_img_pts), cv::NORM_L2);
-			int n = (int)obj_pts[i].size();
-			reproj_errs[i] = (float)std::sqrt(err*err / n);
-			total_err += err*err;
-			total_pts += n;
-		}
-		double total_avg_err = std::sqrt(total_err / total_pts);
-		printf("Calibration succeeded, avg reprojection error = %.7f\n", total_avg_err);
-
-		// --- save as yml file
-		time_t now = time(nullptr);
-		struct tm pnow;
-		localtime_s(&pnow, &now);
-		char date[50];
-		sprintf_s(date, "%02d%02d%02d%02d%02d", pnow.tm_mon + 1,
-			pnow.tm_mday, pnow.tm_hour, pnow.tm_min, pnow.tm_sec);
-
-		std::string left_or_right = infrared == LEFT ? "left" : "right";
-		std::string filename = left_or_right + "_calibration_" + std::string(date) + ".yml";
-		cv::FileStorage fs(filename, cv::FileStorage::WRITE);
-		if (!fs.isOpened())
-		{
-			std::cout << "File can not be opened. " << std::endl;
-			return -1;
-		}
-		fs << "camera_type" << "D435";
-		fs << "calibration_time" << date;
-		fs << "image_width" << img_size.width;
-		fs << "image_height" << img_size.height;
-		fs << "board_width" << board_size.width;
-		fs << "board_height" << board_size.height;
-		fs << "cell_size" << chess_size;
-		fs << "camera_matrix" << camera_mat;
-		fs << "tvecs" << tvecs;
-		fs << "rvecs" << rvecs;
-		fs << "distortion_error" << dist_coeff;
-		fs << "avg_reprojection_error" << total_avg_err;
-		fs << "per_view_reprojection_errors" << cv::Mat(reproj_errs);
-
-		fs.release();
-
-		// --- show undistorted images
-		cv::Mat map1, map2;
-		cv::initUndistortRectifyMap(camera_mat, dist_coeff, cv::Mat(),
-			cv::getOptimalNewCameraMatrix(camera_mat, dist_coeff, img_size, 1, img_size, 0),
-			img_size, CV_16SC2, map1, map2);
-
-		cv::Mat frame_undistorted;
-		while (true)
-		{
-			rs2::frameset frameset;
-			if (!pipeline.poll_for_frames(&frameset)) continue;
-			rs2::frame rs2_frame = frameset.get_infrared_frame(infrared);
-			cv::Mat frame(img_size, CV_8UC1, (void*)rs2_frame.get_data(), cv::Mat::AUTO_STEP);
-
-			cv::remap(frame, frame_undistorted, map1, map2, cv::INTER_LINEAR);
-			cv::resize(frame, frame, frame_undistorted.size());
-			cv::hconcat(std::vector<cv::Mat>{ frame, frame_undistorted }, frame);
-			cv::imshow("undistortion", frame);
-			int kk = cv::waitKey(1);
-			if (kk == ESC_KEY) break;
-		}
-		return true;
-	}
-	else
-	{
-		std::cout << "number of images is not enough" << std::endl;
-		return false;
-	}
+	double total_avg_err = std::sqrt(total_err / total_pts);
+	printf("Calibration succeeded, avg reprojection error = %.7f\n", total_avg_err);
+	return total_avg_err;
 }
 
 bool stereo_calibration(
@@ -291,7 +133,7 @@ bool stereo_calibration(
 		cv::Mat right_camera_mat = cv::Mat::eye(3, 3, CV_64F);
 		cv::Mat left_dist_coeff = cv::Mat::zeros(8, 1, CV_64F);
 		cv::Mat right_dist_coeff = cv::Mat::zeros(8, 1, CV_64F);
-		bool use_calibrateCameraRO = false;
+		bool use_calibrateCameraRO = true;
 		double left_rms, right_rms;
 		if (use_calibrateCameraRO)
 		{
@@ -318,7 +160,7 @@ bool stereo_calibration(
 				0, term_criteia
 			);
 			right_rms = cv::calibrateCamera(
-				obj_pts, left_corner_pts, img_size,
+				obj_pts, right_corner_pts, img_size,
 				right_camera_mat, right_dist_coeff, right_rvecs, right_tvecs,
 				0, term_criteia
 			);
@@ -339,7 +181,7 @@ bool stereo_calibration(
 			right_camera_mat, right_dist_coeff, 
 			img_size,
 			R, T, E, F, 
-			cv::CALIB_FIX_INTRINSIC,
+			cv::CALIB_USE_INTRINSIC_GUESS,
 			term_criteia
 		);
 
@@ -358,7 +200,6 @@ bool stereo_calibration(
 		);
 
 		/*
-		// --------------------- Caliculate avg reprojection error ----------------------
 		obj_pts.clear();
 		obj_pts.resize(left_corner_pts.size(), left_new_obj_pts);
 		double total_err = 0, err;
@@ -378,6 +219,15 @@ bool stereo_calibration(
 		double total_avg_err = std::sqrt(total_err / total_pts);
 		printf("Calibration succeeded, avg reprojection error = %.7f\n", total_avg_err);
 		*/
+		// --------------------- Caliculate avg reprojection error ----------------------
+		double left_err = calculate_average_reprojection_err(
+			obj_pts, left_corner_pts, left_rvecs, left_tvecs,
+			left_camera_mat, left_dist_coeff
+		);
+		double right_err = calculate_average_reprojection_err(
+			obj_pts, right_corner_pts, right_rvecs, right_tvecs,
+			right_camera_mat, right_dist_coeff
+		);
 
 		// --------------------- Show undistorted images ------------------------------
 		cv::Mat left_map1, left_map2, right_map1, right_map2;
@@ -417,8 +267,8 @@ bool stereo_calibration(
 		fs << "right_camera_matrix" << right_camera_mat;
 		fs << "right_distortion_error" << right_dist_coeff;
 		fs << "rms" << rms;
-		// fs << "avg_reprojection_error" << total_avg_err;
-		// fs << "per_view_reprojection_errors" << cv::Mat(reproj_errs);
+		fs << "left_avg_reprojection_error" << left_err;
+		fs << "right_avg_reprojection_error" << right_err;
 		fs << "left_R" << left_R;
 		fs << "right_R" << right_R;
 		fs << "left_P" << left_P;
@@ -479,10 +329,7 @@ int main() try
 	rs2::pipeline_profile pipeline_profile = pipeline.start(rs_cfg);
 	auto depth_sensor = pipeline_profile.get_device().first<rs2::depth_sensor>();
 	depth_sensor.set_option(RS2_OPTION_EMITTER_ENABLED, 0.f);
-
-	// calibration(pipeline, LEFT, img_size, board_size, chess_size);
-	// calibration(pipeline, RIGHT, img_size, board_size, chess_size);
-
+	
 	stereo_calibration(pipeline, img_size, board_size, chess_size);
 
 	return EXIT_SUCCESS;

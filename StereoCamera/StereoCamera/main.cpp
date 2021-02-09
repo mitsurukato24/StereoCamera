@@ -5,6 +5,8 @@
 #include <chrono>
 #include "config.h"
 
+enum Infrared { LEFT = 1, RIGHT = 2 };
+
 int main() try
 {
 	// ------------------------ Read Camera Parameters --------------------------------
@@ -16,14 +18,14 @@ int main() try
 		std::cout << "File can not be opend" << std::endl;
 		return -1;
 	}
-	const int width = (int)fs["image_width"], height = (int)fs["image_height"], fps = 90;
+	const int width = (int)fs["image_width"], height = (int)fs["image_height"], fps = 60;
 	cv::Size img_size(width, height);
 
 	cv::Mat left_cam_mat, right_cam_mat, left_dist_err, right_dist_err;
 	fs["left_camera_matrix"] >> left_cam_mat;
 	fs["right_camera_matrix"] >> right_cam_mat;
 	fs["left_distortion_error"] >> left_dist_err;
-	fs["right_camera_error"] >> left_dist_err;
+	fs["right_distortion_error"] >> right_dist_err;
 	cv::Mat left_R, right_R, left_P, right_P, R, T, Q;
 	fs["left_R"] >> left_R;
 	fs["right_R"] >> right_R;
@@ -47,6 +49,7 @@ int main() try
 	rs_cfg.disable_all_streams();
 	rs_cfg.enable_stream(RS2_STREAM_INFRARED, 1, width, height, RS2_FORMAT_Y8, fps);
 	rs_cfg.enable_stream(RS2_STREAM_INFRARED, 2, width, height, RS2_FORMAT_Y8, fps);
+	rs_cfg.enable_stream(RS2_STREAM_COLOR, width, height, RS2_FORMAT_BGR8, fps);
 	rs2::pipeline_profile pipeline_profile = pipeline.start(rs_cfg);
 	auto depth_sensor = pipeline_profile.get_device().first<rs2::depth_sensor>();
 	depth_sensor.set_option(RS2_OPTION_EMITTER_ENABLED, Config::get<float>("rs2_emitter"));
@@ -81,18 +84,22 @@ int main() try
 	sgbm->setDisp12MaxDiff(Config::get<int>("sgbm_disp_12_max_diff"));
 	sgbm->setMode(cv::StereoSGBM::MODE_SGBM);
 
+	int count = 0;
+	double mean_bm_time = 0., mean_sgbm_time = 0.;
 	rs2::frameset frameset;
 	while (true)
 	{
 		// --------------------------- Get Images -------------------------------------
 		if (!pipeline.poll_for_frames(&frameset)) continue;
-		rs2::frame left_frame = frameset.get_infrared_frame(1);
-		rs2::frame right_frame = frameset.get_infrared_frame(2);
+		rs2::frame left_frame = frameset.get_infrared_frame(LEFT);
+		rs2::frame right_frame = frameset.get_infrared_frame(RIGHT);
+		rs2::frame color_frame = frameset.get_color_frame();
 
 		cv::Mat left_mat(img_size, CV_8UC1, (void*)left_frame.get_data(), cv::Mat::AUTO_STEP);
 		cv::Mat right_mat(img_size, CV_8UC1, (void*)right_frame.get_data(), cv::Mat::AUTO_STEP);
+		cv::Mat color_mat(img_size, CV_8UC3, (void*)color_frame.get_data(), cv::Mat::AUTO_STEP);
 
-		// cv::Mat l_tmp, r_tmp;
+		// -------------------------- Stereo Rectify ------------------------------------
 		cv::remap(left_mat, left_mat, left_map1, left_map2, cv::INTER_LINEAR);
 		cv::remap(right_mat, right_mat, right_map1, right_map2, cv::INTER_LINEAR);
 
@@ -101,9 +108,25 @@ int main() try
 		cv::imshow("Infrared - Left - Right", show);
 		cv::waitKey(1);
 
+		// -------------------------- Compute Disparities -------------------------
+		count++;
+		std::chrono::system_clock::time_point start, end;
+		start = std::chrono::system_clock::now();
 		cv::Mat bm_disp, sgbm_disp;
 		bm->compute(left_mat, right_mat, bm_disp);
+		end = std::chrono::system_clock::now();
+		double bm_time = 0.001 * static_cast<double> (std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+		printf("BM : %lf ms\n", bm_time);
+		mean_bm_time += bm_time;
+		printf("Mean BM : %lf ms\n", mean_bm_time / count);
+		
+		start = std::chrono::system_clock::now();
 		sgbm->compute(left_mat, right_mat, sgbm_disp);
+		end = std::chrono::system_clock::now();
+		double sgbm_time = 0.001 * static_cast<double> (std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+		printf("SGBM : %lf ms\n", sgbm_time);
+		mean_sgbm_time += sgbm_time;
+		printf("Mean SGBM : %lf ms\n", mean_sgbm_time / count);
 
 		cv::Mat show_bm_disp, show_sgbm_disp, show_disp;
 		bm_disp.convertTo(show_bm_disp, CV_8U, 255 / (num_disparities * 16.));
