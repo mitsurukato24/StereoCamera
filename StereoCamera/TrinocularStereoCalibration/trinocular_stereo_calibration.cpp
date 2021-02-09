@@ -88,7 +88,7 @@ bool trinocular_stereo_calibration(
 			cv::drawChessboardCorners(show_color, board_size, cv::Mat(buf_color_corner_pts), color_found);
 			cv::Mat show_calib;
 			cv::hconcat(std::vector<cv::Mat>{show_left, show_right, show_color}, show_calib);
-			cv::imshow("calibration : " + std::to_string((int)buf_left_corner_pts.size()), show_calib);
+			cv::imshow("calibration : " + std::to_string((int)left_corner_pts.size()), show_calib);
 			int key = cv::waitKey(1);
 			if (key == ESC_KEY) break;
 			else if (key == SPACE_KEY)
@@ -140,7 +140,7 @@ bool trinocular_stereo_calibration(
 		cv::Mat right_dist_coeff = cv::Mat::zeros(8, 1, CV_64F);
 		cv::Mat color_camera_mat = cv::Mat::eye(3, 3, CV_64F);
 		cv::Mat color_dist_coeff = cv::Mat::zeros(8, 1, CV_64F);
-		bool use_calibrateCameraRO = false;
+		bool use_calibrateCameraRO = true;
 		double left_rms, right_rms, color_rms;
 		if (use_calibrateCameraRO)
 		{
@@ -186,6 +186,18 @@ bool trinocular_stereo_calibration(
 		std::cout << "RMS error reported by calibrateCamera Left : " << left_rms << std::endl;
 		std::cout << "RMS error reported by calibrateCamera Right : " << right_rms << std::endl;
 		std::cout << "RMS error reported by calibrateCamera Color : " << right_rms << std::endl;
+		calculate_average_reprojection_err(
+			obj_pts, left_corner_pts, left_rvecs, left_tvecs,
+			left_camera_mat, left_dist_coeff
+		);
+		calculate_average_reprojection_err(
+			obj_pts, right_corner_pts, right_rvecs, right_tvecs,
+			right_camera_mat, right_dist_coeff
+		);
+		calculate_average_reprojection_err(
+			obj_pts, color_corner_pts, color_rvecs, color_tvecs,
+			color_camera_mat, color_dist_coeff
+		);
 
 		if (!(cv::checkRange(left_camera_mat) && cv::checkRange(left_dist_coeff) && cv::checkRange(right_camera_mat) && cv::checkRange(right_dist_coeff) && cv::checkRange(color_camera_mat) && cv::checkRange(color_dist_coeff)))
 		{
@@ -194,6 +206,7 @@ bool trinocular_stereo_calibration(
 		}
 
 		// ------------------------------- Calibrate Stereo -------------------------------------------
+		// Left-Right Stereo
 		cv::Mat lr_R, lr_T, lr_E, lr_F;
 		double lr_rms = cv::stereoCalibrate(
 			obj_pts, left_corner_pts, right_corner_pts,
@@ -201,12 +214,25 @@ bool trinocular_stereo_calibration(
 			right_camera_mat, right_dist_coeff,
 			img_size,
 			lr_R, lr_T, lr_E, lr_F,
-			cv::CALIB_USE_INTRINSIC_GUESS,
+			cv::CALIB_FIX_INTRINSIC,
 			term_criteia
 		);
 
 		std::cout << "Stereo Calibrate Left-Right RMS error : " << lr_rms << std::endl;
+		calculate_average_reprojection_err(
+			obj_pts, left_corner_pts, left_rvecs, left_tvecs,
+			left_camera_mat, left_dist_coeff
+		);
+		calculate_average_reprojection_err(
+			obj_pts, right_corner_pts, right_rvecs, right_tvecs,
+			right_camera_mat, right_dist_coeff
+		);
+		calculate_average_reprojection_err(
+			obj_pts, color_corner_pts, color_rvecs, color_tvecs,
+			color_camera_mat, color_dist_coeff
+		);
 
+		// Left-Color Stereo
 		cv::Mat lc_R, lc_T, lc_E, lc_F;
 		double lc_rms = cv::stereoCalibrate(
 			obj_pts, left_corner_pts, color_corner_pts,
@@ -214,11 +240,49 @@ bool trinocular_stereo_calibration(
 			color_camera_mat, color_dist_coeff,
 			img_size,
 			lc_R, lc_T, lc_E, lc_F,
-			cv::CALIB_USE_INTRINSIC_GUESS,
+			cv::CALIB_FIX_INTRINSIC,
 			term_criteia
 		);
 
 		std::cout << "Stereo Calibrate Left-Color RMS error : " << lc_rms << std::endl;
+		calculate_average_reprojection_err(
+			obj_pts, left_corner_pts, left_rvecs, left_tvecs,
+			left_camera_mat, left_dist_coeff
+		);
+		calculate_average_reprojection_err(
+			obj_pts, right_corner_pts, right_rvecs, right_tvecs,
+			right_camera_mat, right_dist_coeff
+		);
+		calculate_average_reprojection_err(
+			obj_pts, color_corner_pts, color_rvecs, color_tvecs,
+			color_camera_mat, color_dist_coeff
+		);
+
+		// Ri-Color Stereo
+		cv::Mat rc_R, rc_T, rc_E, rc_F;
+		double rc_rms = cv::stereoCalibrate(
+			obj_pts, left_corner_pts, color_corner_pts,
+			right_camera_mat, right_dist_coeff,
+			color_camera_mat, color_dist_coeff,
+			img_size,
+			rc_R, rc_T, rc_E, rc_F,
+			cv::CALIB_FIX_INTRINSIC,
+			term_criteia
+		);
+
+		std::cout << "Stereo Calibrate Right-Color RMS error : " << rc_rms << std::endl;
+		calculate_average_reprojection_err(
+			obj_pts, left_corner_pts, left_rvecs, left_tvecs,
+			left_camera_mat, left_dist_coeff
+		);
+		calculate_average_reprojection_err(
+			obj_pts, right_corner_pts, right_rvecs, right_tvecs,
+			right_camera_mat, right_dist_coeff
+		);
+		calculate_average_reprojection_err(
+			obj_pts, color_corner_pts, color_rvecs, color_tvecs,
+			color_camera_mat, color_dist_coeff
+		);
 
 		// -------------------------------- Stereo Rectify ----------------------------------
 		cv::Mat left_R, right_R, left_P, right_P, color_R, color_P, Q;
@@ -234,29 +298,21 @@ bool trinocular_stereo_calibration(
 			img_size, &valid_roi[0], &valid_roi[1], cv::CALIB_ZERO_DISPARITY
 		);
 
-		/*
-		// --------------------- Caliculate avg reprojection error ----------------------
-		obj_pts.clear();
-		obj_pts.resize(left_corner_pts.size(), left_new_obj_pts);
-		double total_err = 0, err;
-		int total_pts = 0;
-		std::vector<float> reproj_errs;
-		std::vector<cv::Point2f> tmp_img_pts;
-		reproj_errs.resize(obj_pts.size());
-		for (int i = 0; i < (int)obj_pts.size(); i++)
-		{
-		cv::projectPoints(cv::Mat(obj_pts[i]), rvecs[i], tvecs[i], camera_mat, dist_coeff, tmp_img_pts);
-		err = cv::norm(cv::Mat(corner_pts[i]), cv::Mat(tmp_img_pts), cv::NORM_L2);
-		int n = (int)obj_pts[i].size();
-		reproj_errs[i] = (float)std::sqrt(err*err / n);
-		total_err += err*err;
-		total_pts += n;
-		}
-		double total_avg_err = std::sqrt(total_err / total_pts);
-		printf("Calibration succeeded, avg reprojection error = %.7f\n", total_avg_err);
-		*/
+		// --------------------- Caliculate Average Reprojection Error ----------------------
+		double left_err = calculate_average_reprojection_err(
+			obj_pts, left_corner_pts, left_rvecs, left_tvecs,
+			left_camera_mat, left_dist_coeff
+		);
+		double right_err = calculate_average_reprojection_err(
+			obj_pts, right_corner_pts, right_rvecs, right_tvecs,
+			right_camera_mat, right_dist_coeff
+		);
+		double color_err = calculate_average_reprojection_err(
+			obj_pts, color_corner_pts, color_rvecs, color_tvecs,
+			color_camera_mat, color_dist_coeff
+		);
 
-		// --------------------- Show undistorted images ------------------------------
+		// --------------------- Show Undistorted Images ------------------------------
 		cv::Mat left_map1, left_map2, right_map1, right_map2, color_map1, color_map2;
 		cv::initUndistortRectifyMap(
 			left_camera_mat, left_dist_coeff, left_R, left_P,
@@ -271,7 +327,7 @@ bool trinocular_stereo_calibration(
 			img_size, CV_32FC1, color_map1, color_map2
 		);
 
-		// ----------------------------- Save as yml file -----------------------------------
+		// ----------------------------- Save As YML File -----------------------------------
 		time_t now = time(nullptr);
 		struct tm pnow;
 		localtime_s(&pnow, &now);
@@ -302,6 +358,9 @@ bool trinocular_stereo_calibration(
 		fs << "left_rms" << left_rms;
 		fs << "right_rms" << right_rms;
 		fs << "color_rms" << color_rms;
+		fs << "left_avg_reprojection_error" << left_err;
+		fs << "right_avg_reprojection_error" << right_err;
+		fs << "color_avg_reprojection_error" << color_err; 
 		// fs << "rms" << rms;
 		// fs << "avg_reprojection_error" << total_avg_err;
 		// fs << "per_view_reprojection_errors" << cv::Mat(reproj_errs);

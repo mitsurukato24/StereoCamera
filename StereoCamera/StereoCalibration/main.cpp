@@ -199,26 +199,6 @@ bool stereo_calibration(
 			img_size, &valid_roi[0], &valid_roi[1]
 		);
 
-		/*
-		obj_pts.clear();
-		obj_pts.resize(left_corner_pts.size(), left_new_obj_pts);
-		double total_err = 0, err;
-		int total_pts = 0;
-		std::vector<float> reproj_errs;
-		std::vector<cv::Point2f> tmp_img_pts;
-		reproj_errs.resize(obj_pts.size());
-		for (int i = 0; i < (int)obj_pts.size(); i++)
-		{
-			cv::projectPoints(cv::Mat(obj_pts[i]), rvecs[i], tvecs[i], camera_mat, dist_coeff, tmp_img_pts);
-			err = cv::norm(cv::Mat(corner_pts[i]), cv::Mat(tmp_img_pts), cv::NORM_L2);
-			int n = (int)obj_pts[i].size();
-			reproj_errs[i] = (float)std::sqrt(err*err / n);
-			total_err += err*err;
-			total_pts += n;
-		}
-		double total_avg_err = std::sqrt(total_err / total_pts);
-		printf("Calibration succeeded, avg reprojection error = %.7f\n", total_avg_err);
-		*/
 		// --------------------- Caliculate avg reprojection error ----------------------
 		double left_err = calculate_average_reprojection_err(
 			obj_pts, left_corner_pts, left_rvecs, left_tvecs,
@@ -262,6 +242,7 @@ bool stereo_calibration(
 		fs << "board_width" << board_size.width;
 		fs << "board_height" << board_size.height;
 		fs << "cell_size" << chess_size;
+		fs << "use_calibrateCameraRO" << use_calibrateCameraRO;
 		fs << "left_camera_matrix" << left_camera_mat;
 		fs << "left_distortion_error" << left_dist_coeff;
 		fs << "right_camera_matrix" << right_camera_mat;

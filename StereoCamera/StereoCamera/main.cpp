@@ -110,24 +110,32 @@ int main() try
 
 		// -------------------------- Compute Disparities -------------------------
 		count++;
+		bool log_calc_time = false;
 		std::chrono::system_clock::time_point start, end;
 		start = std::chrono::system_clock::now();
 		cv::Mat bm_disp, sgbm_disp;
 		bm->compute(left_mat, right_mat, bm_disp);
 		end = std::chrono::system_clock::now();
 		double bm_time = 0.001 * static_cast<double> (std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
-		printf("BM : %lf ms\n", bm_time);
 		mean_bm_time += bm_time;
-		printf("Mean BM : %lf ms\n", mean_bm_time / count);
+		if (log_calc_time)
+		{
+			printf("BM : %lf ms\n", bm_time);
+			printf("Mean BM : %lf ms\n", mean_bm_time / count);
+		}
 		
 		start = std::chrono::system_clock::now();
 		sgbm->compute(left_mat, right_mat, sgbm_disp);
 		end = std::chrono::system_clock::now();
 		double sgbm_time = 0.001 * static_cast<double> (std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
-		printf("SGBM : %lf ms\n", sgbm_time);
 		mean_sgbm_time += sgbm_time;
-		printf("Mean SGBM : %lf ms\n", mean_sgbm_time / count);
+		if (log_calc_time)
+		{
+			printf("SGBM : %lf ms\n", sgbm_time);
+			printf("Mean SGBM : %lf ms\n", mean_sgbm_time / count);
+		}
 
+		// ----------------------------- Show Disparities -----------------------------------
 		cv::Mat show_bm_disp, show_sgbm_disp, show_disp;
 		bm_disp.convertTo(show_bm_disp, CV_8U, 255 / (num_disparities * 16.));
 		sgbm_disp.convertTo(show_sgbm_disp, CV_8U, 255 / (num_disparities * 16.));
@@ -136,6 +144,45 @@ int main() try
 		cv::hconcat(show_bm_disp, show_sgbm_disp, show_disp);
 		cv::imshow("show disparity", show_disp);
 		cv::waitKey(1);
+
+		// ----------------------------- Compute Depth ---------------------------------
+		bm_disp.convertTo(bm_disp, CV_32F, 1.0 / 16.f);
+		sgbm_disp.convertTo(sgbm_disp, CV_32F, 1.0 / 16.f);
+		cv::Mat_<float> bm_depth(bm_disp.size()), sgbm_depth(sgbm_disp.size());
+		float fx = (left_cam_mat.at<double>(0, 0) + right_cam_mat.at<double>(0, 0)) / 2.f;
+		float baseline = 50.f;
+		for (int y = 0; y < height; y++)
+		{
+			for (int x = 0; x < width; x++)
+			{
+				if (bm_disp.at<float>(y, x) > 0.f)
+				{
+					bm_depth(y, x) = fx * baseline / bm_disp.at<float>(y, x);
+				}
+				else
+				{
+					bm_depth(y, x) = std::numeric_limits<float>::max();
+				}
+
+				if (sgbm_disp.at<float>(y, x) > 0.f)
+				{
+					sgbm_depth(y, x) = fx * baseline / sgbm_disp.at<float>(y, x);
+				}
+				else
+				{
+					sgbm_depth(y, x) = std::numeric_limits<float>::max();
+				}
+			}
+		}
+
+		cv::Mat_<float> show_depth;
+		cv::hconcat(bm_depth, sgbm_depth, show_depth);
+		imshow("depth", show_depth);
+		cv::waitKey(1);
+
+		// -------------------------- Check center Depth ----------------------------
+		std::cout << "bm depth : " << bm_depth(height / 2, width / 2) << "mm" << std::endl;
+		std::cout << "sgbm depth : " << sgbm_depth(height / 2, width / 2) << "mm" << std::endl;
 	}
 
 	return 0;

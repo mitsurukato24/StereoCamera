@@ -39,11 +39,13 @@ int main() try
 	cv::Rect left_roi, right_roi;
 	fs["left_roi"] >> left_roi;
 	fs["right_roi"] >> right_roi;
-	cv::Mat left_map1, left_map2, right_map1, right_map2;
+	cv::Mat left_map1, left_map2, right_map1, right_map2, color_map1, color_map2;
 	fs["left_map1"] >> left_map1;
 	fs["left_map2"] >> left_map2;
 	fs["right_map1"] >> right_map1;
 	fs["right_map2"] >> right_map2;
+	fs["color_map1"] >> color_map1;
+	fs["color_map2"] >> color_map2;
 
 	// ------------------------------- Pipeline Settings ---------------------------------
 	rs2::pipeline pipeline;
@@ -56,7 +58,7 @@ int main() try
 	auto depth_sensor = pipeline_profile.get_device().first<rs2::depth_sensor>();
 	depth_sensor.set_option(RS2_OPTION_EMITTER_ENABLED, Config::get<float>("rs2_emitter"));
 
-	// ------------------------- Stereo Matching Parameters -------------------------------
+	// ---------------------- Stereo Matching Parameters -----------------------------
 	cv::Ptr<cv::StereoBM> bm = cv::StereoBM::create();
 	int num_disparities = ((width / 8) + 15) & -16;
 	bm->setROI1(left_roi);
@@ -104,6 +106,7 @@ int main() try
 		// -------------------------- Stereo Rectify ------------------------------------
 		cv::remap(left_mat, left_mat, left_map1, left_map2, cv::INTER_LINEAR);
 		cv::remap(right_mat, right_mat, right_map1, right_map2, cv::INTER_LINEAR);
+		cv::remap(color_mat, color_mat, color_map1, color_map2, cv::INTER_LINEAR);
 
 		cv::Mat show;
 		cv::hconcat(left_mat, right_mat, show);
@@ -112,32 +115,79 @@ int main() try
 
 		// -------------------------- Compute Disparities -------------------------
 		count++;
+		cv::Mat lr_bm_disp, lr_sgbm_disp, rc_bm_disp, rc_sgbm_disp;
 		std::chrono::system_clock::time_point start, end;
 		start = std::chrono::system_clock::now();
-		cv::Mat bm_disp, sgbm_disp;
-		bm->compute(left_mat, right_mat, bm_disp);
+		bm->compute(left_mat, right_mat, lr_bm_disp);
 		end = std::chrono::system_clock::now();
 		double bm_time = 0.001 * static_cast<double> (std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
-		printf("BM : %lf ms\n", bm_time);
 		mean_bm_time += bm_time;
-		printf("Mean BM : %lf ms\n", mean_bm_time / count);
 
 		start = std::chrono::system_clock::now();
-		sgbm->compute(left_mat, right_mat, sgbm_disp);
+		sgbm->compute(left_mat, right_mat, lr_sgbm_disp);
 		end = std::chrono::system_clock::now();
 		double sgbm_time = 0.001 * static_cast<double> (std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
-		printf("SGBM : %lf ms\n", sgbm_time);
 		mean_sgbm_time += sgbm_time;
-		printf("Mean SGBM : %lf ms\n", mean_sgbm_time / count);
+
+		bm->compute(right_mat, color_mat, rc_bm_disp);
+		sgbm->compute(right_mat, color_mat, rc_sgbm_disp);
+
+		bool show_calc_time = false;
+		if (show_calc_time)
+		{
+			printf("BM : %lf ms\n", bm_time);
+			printf("Mean BM : %lf ms\n", mean_bm_time / count);
+			printf("SGBM : %lf ms\n", sgbm_time);
+			printf("Mean SGBM : %lf ms\n", mean_sgbm_time / count);
+		}
 
 		cv::Mat show_bm_disp, show_sgbm_disp, show_disp;
-		bm_disp.convertTo(show_bm_disp, CV_8U, 255 / (num_disparities * 16.));
-		sgbm_disp.convertTo(show_sgbm_disp, CV_8U, 255 / (num_disparities * 16.));
+		lr_bm_disp.convertTo(show_bm_disp, CV_8U, 255 / (num_disparities * 16.));
+		lr_sgbm_disp.convertTo(show_sgbm_disp, CV_8U, 255 / (num_disparities * 16.));
 		cv::applyColorMap(show_bm_disp, show_bm_disp, cv::COLORMAP_JET);
 		cv::applyColorMap(show_sgbm_disp, show_sgbm_disp, cv::COLORMAP_JET);
 		cv::hconcat(show_bm_disp, show_sgbm_disp, show_disp);
 		cv::imshow("show disparity", show_disp);
 		cv::waitKey(1);
+
+		// ----------------------------- Compute Depth ---------------------------------
+		lr_bm_disp.convertTo(lr_bm_disp, CV_32F, 1.0 / 16.f);
+		lr_sgbm_disp.convertTo(lr_sgbm_disp, CV_32F, 1.0 / 16.f);
+		cv::Mat_<float> bm_depth(lr_bm_disp.size()), sgbm_depth(lr_sgbm_disp.size());
+		float fx = (left_cam_mat.at<double>(0, 0) + right_cam_mat.at<double>(0, 0)) / 2.f;
+		float lr_baseline = 50.f;
+		for (int y = 0; y < height; y++)
+		{
+			for (int x = 0; x < width; x++)
+			{
+				if (lr_bm_disp.at<float>(y, x) > 0.f)
+				{
+					bm_depth(y, x) = fx * lr_baseline / lr_bm_disp.at<float>(y, x);
+				}
+				else
+				{
+					bm_depth(y, x) = std::numeric_limits<float>::max();
+				}
+
+				if (lr_sgbm_disp.at<float>(y, x) > 0.f)
+				{
+					sgbm_depth(y, x) = fx * lr_baseline / lr_sgbm_disp.at<float>(y, x);
+				}
+				else
+				{
+					sgbm_depth(y, x) = std::numeric_limits<float>::max();
+				}
+			}
+		}
+
+		cv::Mat_<float> show_depth;
+		cv::hconcat(bm_depth, sgbm_depth, show_depth);
+		imshow("depth", show_depth);
+		cv::waitKey(1);
+
+		// -------------------------- Check center Depth ----------------------------
+		std::cout << "bm depth : " << bm_depth(height / 2, width / 2) << "mm" << std::endl;
+		std::cout << "sgbm depth : " << sgbm_depth(height / 2, width / 2) << "mm" << std::endl;
 	}
 
 	return 0;
